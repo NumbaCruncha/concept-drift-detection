@@ -1,0 +1,65 @@
+new_prob_calc = function(start,finish){
+  glm.fit = glm(Direction~nswdemand,data=elec[start:finish,],family="binomial") 
+  new.probs = predict(glm.fit,elec[start:finish,],type = "response")    ## prediction for new data point
+  glm.probs = predict(glm.fit,type = "response")   ## model prediction
+  ## creation of vector for storing probabilities of class being "UP" or "DOWN", prob < .5 being DOWN or 0 and 1 being UP
+  glm.pred=rep("Down ",(finish-start+1))
+  glm.pred[glm.probs>.5]="Up"
+  ## identify the number of unsuccessful predictions
+  p_old= table(glm.pred,Direction[start:finish])
+  p_count=p_old[2]      # number of errors in model
+  pt = p_count/wj            ## error rate calculation, no of errors/data points
+  sigt = sqrt((pt*(1-pt))/(finish-start+1))    ## calculation of updated S.D based on error rate
+  vals = list(prob=pt,sd=sigt)
+  return vals
+}
+
+# parameter initialization
+pmin = 12345 
+sigmin = 12345  
+tw= 2  # time point of warning
+td = 3 # time point of detection
+w0=48  ## number of observations for base model
+start=1 ## starting observation point for base model calculation
+Warning = FALSE   # flag to identify concept drift
+n_DT= 0    # number of drifts detected
+DT = NULL  # vector to store time points where concept drift occured
+wj = w0
+
+# calculation of probabilities for base model
+val = new_prob_calc(start,wj)
+
+# incremental addition of data points and calculation of concept drift
+for (i in ((w0+1):45312)){
+  if ((val$pt+ val$sigt)<(pmin+sigmin)){
+       pmin = val$pt
+       sigmin = val$sigt
+  }
+  if (((val$pt+val$sigt)>(pmin+(3*sigmin))) && (Warning == TRUE)) {   ## check for out of control state
+       td = i       # set change detection time to current to current time point
+       val=new_prob_calc(tw,i)
+       pmin = 12345    # resetting of pmin
+       sigmin=12345    # resetting of sigmin
+       n_DT= n_DT +1   # updating the change detection counter
+       DT = append(DT,td)  # appending the change detector vector
+       start = tw  # new starting point for model calculation
+       Warning == FALSE  # resetting warning flag
+       
+   } 
+   else if ((val$pt+val$sigt)>(pmin+(2*sigmin))){  ## check for warning state
+        
+            if(Warning == FALSE){  
+              Warning = TRUE
+              tw = i   # updating warning time to current time point
+            }
+              val=new_prob_calc(start,i)
+                   
+   }
+   else {                        ## in control state
+          Warning = FALSE
+          val=new_prob_calc(start,i)
+   }
+  
+}
+n_DT            ## final number of concept drift detected
+DT              ## change detection vector with time points
