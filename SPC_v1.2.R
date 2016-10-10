@@ -1,5 +1,6 @@
 library(dplyr)
 library(rpart)
+library(zoo)
 library(rpart.plot)
 electricity = read.csv('elecNorm.csv')
 elec2 <- read.csv("C:/Users/micha/OneDrive - University of Otago/UoO/INFO411/Project/elec2.data", header=FALSE)
@@ -20,70 +21,73 @@ test = seq(30209,45312,1)
 
 ###############################################################################
 # initialise variables
-idx = index(electricity)
-tw = 2 # warning threshold
-td = 3 # detection threshold
-pmin = Inf # min classifcation error
-smin = Inf # std. dev. of the min classification error 
-fw = FALSE # warning flag
 
-# initialise window
-w.size = 48
-j=1
-w.next = j+1
-w0 = seq(w.start,w.size,1)
-###############################################################################
-# Main
-main(idx, tw, td, pmin, smin, fw, w.size, j, w.next, wo)
+    idx = index(electricity)
+    tw = 2 # warning threshold
+    td = 3 # detection threshold
+    pmin = Inf # min classifcation error
+    smin = Inf # std. dev. of the min classification error 
+    fw = FALSE # warning flag
 
-main = function(idx, tw, td, pmin, smin, fw, w.size, j, w.next, wo){
+    # initialise window
+    w.size = 48
+    j=1
+    w.start = j
+    w.next = j
+    w0 = seq(j,w.size,1)
+
+##################################################################################
+# FUNCTION: cd = Concept Drift Detector
+# INPUT: initial variables
+# RETURN: detection instances
+
+cd = function(idx, tw, td, pmin, smin, fw, w.size, j, w.start, w.next, w0){
+    st=0
   for (j in idx)  {
     # run main loop over all remaining items in the dataset
-      if (j < length(w0)) {
+    if (j < length(w0)) {
       # grow initial window
-      w.start = j
-      w = seq(w.start, w.next)
-      w.next = w.next + j
-    } else {
-      pt = tree.mod(w)                        # run classfier for initial window and return pt
-      st = (pt * (1 - pt)) / length(w)        # calcuate st from pt
       
-      if ((pt + st) < (pmin + smin)) {
-        pmin = pt
-        smin = st
-      }
-      if (((pt + st) > (pmin + (3 * smin))) && (Warning == TRUE)) {
-        td = j
-        w.next = j - tw + 1
-        pmin = Inf
-        smin = Inf
-        tw = Inf
-      }
-      else if ((pt + st) > (pmin + (2 * smin))) {
-        if (fw = FALSE) {
-          fw = TRUE
-          tw = j
-        } else {
+      w.next = w.next + 1
+        } else { # run classfier for initial window and return pt
+          # browser()
+          w = seq(w.start, w.next)
+          pt = tree.mod(w)                        
+          st = (pt * (1 - pt)) / length(w)       # calcuate st from pt
+      
+        if ((pt + st) < (pmin + smin)) {
+                pmin = pt
+                smin = st
+                }
+        if (((pt + st) > (pmin + (3 * smin))) && (fw == TRUE)) {
+              td = j
+                w.next = j - tw + 1
+                pmin = Inf
+                smin = Inf
+                tw = Inf
+                }
+        else if ((pt + st) > (pmin + (2 * smin))) {
+                if (fw == FALSE) {
+                  fw = TRUE
+                  tw = j
+            }} else {
         fw = FALSE
         w.next = w.next + 1
-      }
-      }
+            }
+        }
     }
-  }
-  
-DT =  tw
-return(DT)
+      
+    DT =  tw
+    return(DT)
 }
 
 ###############################################################################
-# Decision Tree Classifier
+# FUNCTION: tree.mod = Decision Tree Classifier
 # INPUT: w = window
 # RETURN: pt = probability of observing misclassified values
 #           = (false positive + false negatives)/window size
 tree.mod = function(w){
   model = rpart(class~nswdemand,data=electricity[w,], method = "class")
-  # pruned.tree = prune(model, cp=model$cptable[which.miwn(model$cptable[,"xerror"]),"CP"])
-  # pruned.tree$frame$n[2:3]
   actual = electricity[w,9]
   tree.pred = predict(model, type = "class")
   cont.table = table(actual, tree.pred)
